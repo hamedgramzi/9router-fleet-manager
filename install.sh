@@ -109,8 +109,33 @@ if ! docker network ls | grep -q "$DOCKER_NETWORK"; then
     docker network create "$DOCKER_NETWORK"
 fi
 
-echo -e "${BLUE}▶ Pulling 9Router Docker image (${ROUTER_IMAGE:-decolua/9router:latest})...${PLAIN}"
-docker pull "${ROUTER_IMAGE:-decolua/9router:latest}"
+TARGET_IMAGE="${ROUTER_IMAGE:-decolua/9router:latest}"
+echo -e "${BLUE}▶ Pulling 9Router Docker image (${TARGET_IMAGE})...${PLAIN}"
+if ! docker pull "$TARGET_IMAGE"; then
+    echo -e "${YELLOW}⚠️ Failed to pull ${TARGET_IMAGE} directly from Docker Hub.${PLAIN}"
+    if [ -t 0 ]; then
+        while true; do
+            echo -e "${CYAN}You can specify an alternative mirror, custom proxy image, or private registry repository.${PLAIN}"
+            read -rp "Enter custom Docker image/mirror (e.g. your-mirror.com/decolua/9router:latest) [or 'q' to abort]: " custom_image
+            if [ -z "$custom_image" ] || [ "$custom_image" = "q" ] || [ "$custom_image" = "Q" ]; then
+                echo -e "${RED}Error: Docker pull aborted by user.${PLAIN}"
+                exit 1
+            fi
+
+            echo -e "${BLUE}▶ Attempting pull from custom registry: ${custom_image}...${PLAIN}"
+            if docker pull "$custom_image"; then
+                docker tag "$custom_image" "$TARGET_IMAGE"
+                echo -e "${GREEN}✅ Successfully pulled and tagged image as ${TARGET_IMAGE}.${PLAIN}"
+                break
+            else
+                echo -e "${RED}❌ Failed to pull from ${custom_image}. Please try another mirror or check network.${PLAIN}"
+            fi
+        done
+    else
+        echo -e "${RED}Error: Failed to pull ${TARGET_IMAGE} and non-interactive shell cannot prompt for custom registry.${PLAIN}"
+        exit 1
+    fi
+fi
 
 # Ensure Guardian Nginx container is running
 if ! docker ps -a --format '{{.Names}}' | grep -q "^9router-guardian$"; then
