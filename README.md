@@ -130,11 +130,47 @@ When you click **🔄 Update** on an active instance:
 
 ---
 
+## 🌐 Outbound Proxy Pool Injection (Warp / SOCKS / HTTP)
+
+Major AI model providers (such as OpenAI and Anthropic) often block or heavily rate-limit IP ranges originating from data centers and restricted regions.
+
+To guarantee uninterrupted outbound AI connectivity for your users, **9Router Fleet Manager** provides native, automated proxy pool injection:
+
+### How It Works:
+1. **Automated Database Injection**: Upon deploying a new tenant container, Fleet Manager waits for the SQLite database (`data.sqlite`) to initialize and injects an active proxy pool entry into the tenant's `proxyPools` table in the background.
+2. **One-Click Manual Fallback (`+ Add Proxy Pool`)**: If container initialization takes longer than expected or if you want to re-sync proxy settings on demand, click **`+ Add Proxy Pool`** next to any tenant in the admin dashboard. This injects the proxy pool directly into the tenant's database and restarts the container.
+
+### Configuration (`.env`):
+
+Configure your upstream egress proxy in `.env`:
+
+```env
+# Enable or disable outbound proxy injection (true/false)
+ENABLE_UPSTREAM_PROXY=true
+
+# Display label inside 9Router tenant dashboard
+UPSTREAM_PROXY_NAME=Warp
+
+# Outbound Proxy URL (HTTP or SOCKS5)
+UPSTREAM_PROXY_URL=http://172.18.0.1:40001
+
+# Proxy type: http or socks5
+UPSTREAM_PROXY_TYPE=http
+
+# Strict proxy routing (true/false)
+UPSTREAM_PROXY_STRICT=false
+```
+
+*Note: If your server has direct, unblocked access to AI APIs, you can disable this feature by setting `ENABLE_UPSTREAM_PROXY=false`. The `+ Add Proxy Pool` button will automatically hide in the dashboard.*
+
+---
+
 ## ⚙️ Configuration Reference
 
 | Environment Variable | Default | Description |
 |---|---|---|
-| `DOMAIN_NAME` | `localhost` | Public domain resolving to this host for TLS |
+| `DOMAIN_NAME` | `(empty)` | Public domain resolving to this host for TLS (leave empty for IP / HTTP mode) |
+| `SERVER_IP` | `(auto)` | Public server IP, auto-detected during installation |
 | `PANEL_PORT` | `21000` | Port for the Fleet Manager web interface |
 | `PORT_RANGE_START` | `21001` | First allocated port for tenant instances |
 | `PORT_RANGE_END` | `21050` | Last allocated port for tenant instances |
@@ -142,7 +178,10 @@ When you click **🔄 Update** on an active instance:
 | `CONTAINER_MEM_LIMIT` | `256m` | Hard memory ceiling per tenant |
 | `CONTAINER_CPUS` | `0.35` | CPU quota allocation per tenant |
 | `ENABLE_UPSTREAM_PROXY` | `true` | Auto-inject outbound proxy pool into SQLite |
+| `UPSTREAM_PROXY_NAME` | `Warp` | Name label for injected proxy pool |
 | `UPSTREAM_PROXY_URL` | `http://172.18.0.1:40001` | Upstream proxy URL (HTTP/SOCKS5) |
+| `UPSTREAM_PROXY_TYPE` | `http` | Upstream proxy type (`http` or `socks5`) |
+| `UPSTREAM_PROXY_STRICT` | `false` | Enforce strict proxy routing |
 | `SSL_CERT_PATH` | `/etc/letsencrypt/...` | Fullchain certificate path |
 | `SSL_KEY_PATH` | `/etc/letsencrypt/...` | Private key certificate path |
 

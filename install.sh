@@ -205,7 +205,6 @@ systemctl enable --now 9router-fleet.service
 echo -e "${BLUE}▶ Installing 9router-fleet CLI tool to ${CLI_TARGET}...${PLAIN}"
 cp "$INSTALL_DIR/scripts/9router-fleet.sh" "$CLI_TARGET"
 chmod +x "$CLI_TARGET"
-ln -sf "$CLI_TARGET" /usr/local/bin/9router
 
 # 10. Wait a moment for initial credentials generation
 sleep 2
@@ -234,7 +233,7 @@ ${GREEN}================================================================${PLAIN}
   ${CYAN}Password:${PLAIN}        ${YELLOW}${ADMIN_PASS}${PLAIN}
 
   ${BLUE}Command Line Tool:${PLAIN}
-  Simply type: ${GREEN}9router-fleet${PLAIN} or ${GREEN}9router${PLAIN} anytime to:
+  Simply type: ${GREEN}9router-fleet${PLAIN} anytime to:
   - Start / Stop / Restart the service
   - View live logs and system status
   - Retrieve panel credentials

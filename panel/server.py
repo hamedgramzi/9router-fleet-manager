@@ -257,6 +257,19 @@ def remove_nginx_config(username: str):
     except Exception:
         pass
 
+def sync_all_nginx_configs():
+    try:
+        db = load_db()
+        for username, info in db.items():
+            port = info.get("port")
+            c_name = info.get("container_name")
+            if port and c_name:
+                update_nginx_config(username, port, c_name)
+    except Exception as e:
+        print(f"Startup Nginx sync note: {e}")
+
+sync_all_nginx_configs()
+
 def verify_session(fleet_session: Optional[str] = Cookie(None), x_admin_token: Optional[str] = Header(None)):
     admin_data = load_admin()
     fleet_admin_token = os.getenv("FLEET_ADMIN_TOKEN")
@@ -580,7 +593,7 @@ def sync_instance_proxy(username: str, user=Depends(verify_session)):
     except Exception:
         pass
 
-    return {"success": True, "message": f"{UPSTREAM_PROXY_NAME} proxy pool synced and container restarted."}
+    return {"success": True, "message": f"{UPSTREAM_PROXY_NAME} outbound proxy pool successfully injected and container restarted."}
 
 @app.post("/api/instances/{username}/action")
 def instance_action(username: str, action: str, user=Depends(verify_session)):
@@ -903,6 +916,11 @@ INDEX_HTML = """<!DOCTYPE html>
     </div>
 
     <script>
+        const PROXY_CONFIG = {
+            enabled: __ENABLE_UPSTREAM_PROXY__,
+            name: "__UPSTREAM_PROXY_NAME__"
+        };
+
         function checkAuth() {
             fetch("/api/auth-check")
                 .then(r => {
@@ -954,6 +972,9 @@ INDEX_HTML = """<!DOCTYPE html>
             data.forEach(item => {
                 const tr = document.createElement("tr");
                 const badgeClass = item.status === "running" ? "badge-running" : "badge-stopped";
+                const proxyBtn = PROXY_CONFIG.enabled 
+                    ? `<button onclick="syncProxy('${item.username}')" class="btn-sec" style="color: var(--accent); border-color: var(--accent);">+ Add Proxy Pool</button>` 
+                    : '';
                 tr.innerHTML = `
                     <td><strong>${item.username}</strong><br><small style="color: var(--text-muted);">${item.memo || ''}</small></td>
                     <td><code>${item.port}</code></td>
@@ -964,7 +985,7 @@ INDEX_HTML = """<!DOCTYPE html>
                     </td>
                     <td class="actions">
                         <button onclick="updateInstance('${item.username}', this)" class="btn-sec" style="color: var(--accent); border-color: var(--accent);">🔄 Update</button>
-                        <button onclick="syncProxy('${item.username}')" class="btn-sec">+ Sync Upstream</button>
+                        ${proxyBtn}
                         <button onclick="openEdit('${item.username}', '${item.memo || ''}')" class="btn-sec">Edit</button>
                         <button onclick="action('${item.username}', 'restart')" class="btn-sec">Restart</button>
                         <button onclick="del('${item.username}')" class="btn-danger">Delete</button>
@@ -1052,10 +1073,11 @@ INDEX_HTML = """<!DOCTYPE html>
         }
 
         async function syncProxy(username) {
+            if (!confirm(`Inject outbound proxy pool (${PROXY_CONFIG.name}) into ${username}'s SQLite database and restart container?`)) return;
             const res = await fetch(`/api/instances/${username}/sync-proxy`, { method: "POST" });
             const data = await res.json();
             if (res.ok) {
-                alert("Upstream proxy pool synced successfully for " + username + ".");
+                alert(data.message || `Proxy pool (${PROXY_CONFIG.name}) injected successfully for ${username}.`);
                 loadInstances();
             } else {
                 alert("Error: " + (data.detail || JSON.stringify(data)));
@@ -1099,4 +1121,6 @@ def favicon():
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return INDEX_HTML
+    html = INDEX_HTML.replace("__ENABLE_UPSTREAM_PROXY__", "true" if ENABLE_UPSTREAM_PROXY else "false")
+    html = html.replace("__UPSTREAM_PROXY_NAME__", UPSTREAM_PROXY_NAME)
+    return html
