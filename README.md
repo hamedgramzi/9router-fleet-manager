@@ -1,5 +1,12 @@
 # ⚡ 9Router Fleet Manager
 
+<p align="center">
+  <a href="https://github.com/hamedgramzi/9router-fleet-manager/releases"><img src="https://img.shields.io/github/v/release/hamedgramzi/9router-fleet-manager?color=blue&label=Release" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python">
+</p>
+
 An enterprise-grade, multi-tenant orchestration manager and port guardian for [9Router](https://github.com/decolua/9router) AI proxy instances.
 
 Provides complete database isolation, automated port allocation, SSL termination, upstream proxy injection (e.g. Warp), and **zero-downtime rolling updates with automatic fail-safe rollbacks**.
