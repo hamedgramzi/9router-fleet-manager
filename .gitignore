@@ -1,0 +1,42 @@
+# Environment files
+.env
+.env.local
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+
+# Fleet Runtime State & Credentials (NEVER COMMIT)
+panel/data/*.json
+!panel/data/.gitkeep
+users/
+data/
+
+# Backup files
+*.bak
+*.bak_*
+*.pre_update_bak
+
+# Nginx generated tenant configs
+nginx/conf.d/*.conf
+!nginx/conf.d/.gitkeep
+
+# SSL Keys and Certs
+*.pem
+*.key
+*.crt
+
+# IDE & OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

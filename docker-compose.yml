@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  guardian:
+    image: nginx:alpine
+    container_name: 9router-guardian
+    restart: unless-stopped
+    ports:
+      - "${PORT_RANGE_START:-21001}-${PORT_RANGE_END:-21050}:${PORT_RANGE_START:-21001}-${PORT_RANGE_END:-21050}"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${SSL_CERTS_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+    networks:
+      - fleet-net
+
+  panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 9router-panel
+    restart: unless-stopped
+    ports:
+      - "${PANEL_PORT:-21000}:21000"
+    env_file:
+      - .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./panel/data:/app/panel/data
+      - ./users:/app/users
+      - ./nginx/conf.d:/app/nginx/conf.d
+    networks:
+      - fleet-net
+
+networks:
+  fleet-net:
+    name: ${DOCKER_NETWORK:-9router-fleet-net}
+    external: true
