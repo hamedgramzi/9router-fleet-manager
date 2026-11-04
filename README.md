@@ -4,6 +4,10 @@ An enterprise-grade, multi-tenant orchestration manager and port guardian for [9
 
 Provides complete database isolation, automated port allocation, SSL termination, upstream proxy injection (e.g. Warp), and **zero-downtime rolling updates with automatic fail-safe rollbacks**.
 
+<p align="center">
+  <img src="assets/dashboard.jpeg" alt="9Router Fleet Manager Dashboard" width="100%">
+</p>
+
 ---
 
 ## ✨ Features
