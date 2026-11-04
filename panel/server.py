@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 import docker
-from fastapi import FastAPI, HTTPException, Header, Depends, Response, Cookie
+from fastapi import FastAPI, HTTPException, Header, Depends, Response, Cookie, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -33,7 +33,14 @@ ADMIN_CRED_FILE = BASE_DIR / "panel" / "data" / "admin.json"
 NGINX_CONF_DIR = BASE_DIR / "nginx" / "conf.d"
 USERS_DIR = BASE_DIR / "users"
 
-DOMAIN_NAME = os.getenv("DOMAIN_NAME", "localhost")
+RAW_DOMAIN_NAME = os.getenv("DOMAIN_NAME", "").strip()
+if RAW_DOMAIN_NAME.lower() in ("example.com", "localhost", "none", "null"):
+    DOMAIN_NAME = ""
+else:
+    DOMAIN_NAME = RAW_DOMAIN_NAME
+
+SERVER_IP = os.getenv("SERVER_IP", "").strip()
+
 PORT_RANGE_START = int(os.getenv("PORT_RANGE_START", "21001"))
 PORT_RANGE_END = int(os.getenv("PORT_RANGE_END", "21050"))
 DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "9router-fleet-net")
@@ -50,8 +57,30 @@ UPSTREAM_PROXY_URL = os.getenv("UPSTREAM_PROXY_URL", "http://172.18.0.1:40001")
 UPSTREAM_PROXY_TYPE = os.getenv("UPSTREAM_PROXY_TYPE", "http")
 UPSTREAM_PROXY_STRICT = os.getenv("UPSTREAM_PROXY_STRICT", "false").lower() in ("true", "1", "yes")
 
-SSL_CERT_PATH = os.getenv("SSL_CERT_PATH", f"/etc/letsencrypt/live/{DOMAIN_NAME}/fullchain.pem")
-SSL_KEY_PATH = os.getenv("SSL_KEY_PATH", f"/etc/letsencrypt/live/{DOMAIN_NAME}/privkey.pem")
+SSL_CERT_PATH = os.getenv("SSL_CERT_PATH", f"/etc/letsencrypt/live/{DOMAIN_NAME}/fullchain.pem" if DOMAIN_NAME else "")
+SSL_KEY_PATH = os.getenv("SSL_KEY_PATH", f"/etc/letsencrypt/live/{DOMAIN_NAME}/privkey.pem" if DOMAIN_NAME else "")
+
+def is_ssl_active() -> bool:
+    if not DOMAIN_NAME or not SSL_CERT_PATH or not SSL_KEY_PATH:
+        return False
+    return Path(SSL_CERT_PATH).exists() and Path(SSL_KEY_PATH).exists()
+
+def get_instance_urls(port: int, request: Optional[Request] = None):
+    ssl_enabled = is_ssl_active()
+    scheme = "https" if ssl_enabled else "http"
+    if DOMAIN_NAME:
+        host = DOMAIN_NAME
+    elif request and request.headers.get("host"):
+        # Uses whatever IP or hostname you typed in your browser address bar
+        host = request.headers.get("host").split(":")[0]
+    elif SERVER_IP:
+        host = SERVER_IP
+    else:
+        host = "localhost"
+    return {
+        "base_url": f"{scheme}://{host}:{port}/v1",
+        "panel_url": f"{scheme}://{host}:{port}"
+    }
 
 app = FastAPI(title="9Router Fleet Manager")
 client = docker.from_env()
@@ -155,15 +184,26 @@ def get_next_available_port():
     raise HTTPException(status_code=400, detail=f"No free ports available in range {PORT_RANGE_START}-{PORT_RANGE_END}")
 
 def update_nginx_config(username: str, port: int, container_name: str):
-    conf_content = f"""# User: {username}
-server {{
-    listen {port} ssl;
-    server_name {DOMAIN_NAME};
+    ssl_active = is_ssl_active()
+    server_name_val = DOMAIN_NAME if DOMAIN_NAME else "_"
+
+    if ssl_active:
+        listen_block = f"""    listen {port} ssl;
+    server_name {server_name_val};
 
     ssl_certificate {SSL_CERT_PATH};
     ssl_certificate_key {SSL_KEY_PATH};
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_ciphers HIGH:!aNULL:!MD5;"""
+        proto_header = "https"
+    else:
+        listen_block = f"""    listen {port};
+    server_name {server_name_val};"""
+        proto_header = "$scheme"
+
+    conf_content = f"""# User: {username}
+server {{
+{listen_block}
 
     client_max_body_size 128M;
 
@@ -176,7 +216,7 @@ server {{
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto {proto_header};
     }}
 
     location / {{
@@ -187,7 +227,7 @@ server {{
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto {proto_header};
         proxy_buffering off;
         proxy_read_timeout 600s;
     }}
@@ -199,7 +239,11 @@ server {{
         f.write(conf_content)
     try:
         guard = client.containers.get("9router-guardian")
-        guard.exec_run("nginx -s reload")
+        res = guard.exec_run("nginx -t")
+        if res.exit_code == 0:
+            guard.exec_run("nginx -s reload")
+        else:
+            print(f"Nginx config test warning: {res.output.decode('utf-8', errors='ignore')}")
     except Exception as e:
         print(f"Nginx reload note: {e}")
 
@@ -298,7 +342,7 @@ def auth_check(user=Depends(verify_session)):
     return {"status": "ok", "user": user}
 
 @app.get("/api/instances")
-def list_instances(user=Depends(verify_session)):
+def list_instances(request: Request, user=Depends(verify_session)):
     db = load_db()
     results = []
     for username, info in db.items():
@@ -313,6 +357,7 @@ def list_instances(user=Depends(verify_session)):
             status = "error"
 
         port = info.get("port")
+        urls = get_instance_urls(port, request)
         results.append({
             "username": username,
             "port": port,
@@ -322,13 +367,13 @@ def list_instances(user=Depends(verify_session)):
             "version": info.get("version", "latest"),
             "created_at": info.get("created_at"),
             "memo": info.get("memo", ""),
-            "base_url": f"https://{DOMAIN_NAME}:{port}/v1",
-            "panel_url": f"https://{DOMAIN_NAME}:{port}"
+            "base_url": urls["base_url"],
+            "panel_url": urls["panel_url"]
         })
     return results
 
 @app.post("/api/instances")
-def create_instance(req: CreateUserReq, user=Depends(verify_session)):
+def create_instance(req: CreateUserReq, request: Request, user=Depends(verify_session)):
     username = req.username.strip().lower()
     if not username.isalnum() or len(username) < 3:
         raise HTTPException(status_code=400, detail="Username must be alphanumeric and >= 3 chars")
@@ -398,13 +443,14 @@ def create_instance(req: CreateUserReq, user=Depends(verify_session)):
         }
         save_db(db)
 
+        urls = get_instance_urls(port, request)
         return {
             "success": True,
             "username": username,
             "port": port,
             "initial_password": password,
-            "base_url": f"https://{DOMAIN_NAME}:{port}/v1",
-            "panel_url": f"https://{DOMAIN_NAME}:{port}"
+            "base_url": urls["base_url"],
+            "panel_url": urls["panel_url"]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -665,10 +711,12 @@ def update_instance_version(username: str, user=Depends(verify_session)):
             health_err = f"Container status check failed: {str(e)}"
             break
 
-        url = f"https://127.0.0.1:{port}/login"
+        proto = "https" if is_ssl_active() else "http"
+        url = f"{proto}://127.0.0.1:{port}/login"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "FleetManager/1.0"})
-            with urllib.request.urlopen(req, context=ctx, timeout=3) as resp:
+            url_ctx = ctx if proto == "https" else None
+            with urllib.request.urlopen(req, context=url_ctx, timeout=3) as resp:
                 if resp.status == 200:
                     health_ok = True
                     break

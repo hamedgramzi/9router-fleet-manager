@@ -79,20 +79,43 @@ python3 -m venv "$INSTALL_DIR/venv"
 "$INSTALL_DIR/venv/bin/pip" install --upgrade pip
 "$INSTALL_DIR/venv/bin/pip" install -r requirements.txt
 
+get_public_ip() {
+    local ip
+    for provider in "https://api.ipify.org" "https://icanhazip.com" "https://ifconfig.co/ip"; do
+        ip=$(curl -fs4 -m 3 "$provider" 2>/dev/null | tr -d '[:space:]')
+        if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$ip"
+            return
+        fi
+    done
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}' | tr -d '[:space:]')
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ip"
+    else
+        echo "127.0.0.1"
+    fi
+}
+
+SERVER_IP=$(get_public_ip)
+
 # 6. Configure .env
 if [ ! -f "$INSTALL_DIR/.env" ]; then
     echo -e "${BLUE}▶ Configuring environment (.env)...${PLAIN}"
     cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
+    sed -i "s|^SERVER_IP=.*|SERVER_IP=${SERVER_IP}|g" "$INSTALL_DIR/.env"
     
     # Optional prompt for domain if running interactively
     if [ -t 0 ]; then
-        read -rp "Enter your Public Domain for TLS (e.g. ai.example.com) [default: localhost]: " user_domain
-        if [ -n "$user_domain" ]; then
-            sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=${user_domain}|g" "$INSTALL_DIR/.env"
+        read -rp "Enter your Public Domain for TLS (optional, leave blank for Direct IP / HTTP) [default: none]: " user_domain
+        user_domain=$(echo "$user_domain" | tr -d '[:space:]')
+        if [ -n "$user_domain" ] && [ "$user_domain" != "none" ]; then
+            sed -i "s|^DOMAIN_NAME=.*|DOMAIN_NAME=${user_domain}|g" "$INSTALL_DIR/.env"
+        else
+            sed -i "s|^DOMAIN_NAME=.*|DOMAIN_NAME=|g" "$INSTALL_DIR/.env"
         fi
         read -rp "Enter Port for Fleet Manager Panel [default: 21000]: " user_panel_port
         if [ -n "$user_panel_port" ]; then
-            sed -i "s|PANEL_PORT=.*|PANEL_PORT=${user_panel_port}|g" "$INSTALL_DIR/.env"
+            sed -i "s|^PANEL_PORT=.*|PANEL_PORT=${user_panel_port}|g" "$INSTALL_DIR/.env"
         fi
     fi
 fi
@@ -196,14 +219,17 @@ if [ -f "$ADMIN_FILE" ]; then
     ADMIN_PASS=$(grep -o '"plain_initial_pass": *"[^"]*"' "$ADMIN_FILE" | cut -d'"' -f4)
 fi
 
-SERVER_IP=$(curl -s4 ifconfig.me || curl -s4 icanhazip.com || echo "YOUR_SERVER_IP")
+PANEL_HOST="${SERVER_IP}"
+if [ -n "${DOMAIN_NAME:-}" ]; then
+    PANEL_HOST="${DOMAIN_NAME}"
+fi
 
 echo -e "
 ${GREEN}================================================================${PLAIN}
 ${GREEN} 🎉 9Router Fleet Manager successfully installed!               ${PLAIN}
 ${GREEN}================================================================${PLAIN}
 
-  ${CYAN}Web Panel URL:${PLAIN}   http://${SERVER_IP}:${PANEL_PORT:-21000}
+  ${CYAN}Web Panel URL:${PLAIN}   http://${PANEL_HOST}:${PANEL_PORT:-21000}
   ${CYAN}Username:${PLAIN}        ${YELLOW}${ADMIN_USER}${PLAIN}
   ${CYAN}Password:${PLAIN}        ${YELLOW}${ADMIN_PASS}${PLAIN}
 
