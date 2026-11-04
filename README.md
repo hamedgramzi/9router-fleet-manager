@@ -17,6 +17,27 @@ Provides complete database isolation, automated port allocation, SSL termination
 
 ---
 
+## 🎯 Why 9Router Fleet Manager?
+
+By default, [9Router](https://github.com/decolua/9router) is designed as a **single-tenant** application with a shared SQLite database and a single set of API keys. 
+
+If you want to provide 9Router for a development team, a startup, a company department, or a group of friends:
+
+- ❌ **The Expensive Way:** Every person rents and maintains their own separate VPS ($5–$15/mo each). For a team of 15 developers, that means paying for 15 servers, managing 15 Linux installations, and wasting 80% of idle server resources.
+- ❌ **The Insecure Way:** Sharing a single 9Router instance means everyone shares the same admin panel, exposes their private API keys, overwrites each other's custom model providers, and interferes with token rate limits.
+
+### 💡 The Solution: A Private Cloud for Your Fleet
+
+**9Router Fleet Manager** solves this by turning any standard Linux VPS (even a modest $5/month server with 2GB RAM) into a **centralized, multi-tenant AI gateway platform**:
+
+- 🔒 **100% Private & Isolated**: Every user gets their own dedicated Docker container, isolated SQLite database, separate web panel, and unique OpenAI-compatible Base URL (`https://yourdomain.com:21001/v1`). No shared state, no leaked API keys.
+- 💰 **Massive Cost Consolidation**: Run 10 to 30+ independent 9Router instances on a single host with automated memory caps (e.g., 256MB) and CPU quotas (e.g., 0.35 cores).
+- ⚡ **Zero-DevOps for Your Users**: Provide teammates with their own instant endpoint. They simply paste their private Base URL into **Cursor, Claude Code, Cline, Codex, or Copilot** and start coding with their personal AI models.
+- 🛡️ **Centralized Port Guardian & SSL**: A lightweight Nginx front-end automatically terminates TLS/SSL and allocates dedicated ports (`21001–21050`) for each user.
+- 🌐 **Unified Egress & Unblocked Access**: Centrally route all outbound AI traffic through an injected Warp / SOCKS proxy so everyone bypasses data center restrictions automatically.
+
+---
+
 ## ✨ Features
 
 - **Multi-Tenant Isolation**: Each user/tenant gets their own isolated Docker container, storage directory, and SQLite database.
